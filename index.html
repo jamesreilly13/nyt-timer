@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Splits</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #EDF0F3;
+  --surface: #FFFFFF;
+  --ink: #18202B;
+  --muted: #5E6B7A;
+  --line: #D3D9E0;
+  --mini: #3D74C9;
+  --midi: #2E9A7F;
+  --medium: #D9962A;
+  --hard: #C24A44;
+  --good: #1F8A4C;
+  --bad: #C0392B;
+  --focus: #3D74C9;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161C;
+    --surface: #1B2129;
+    --ink: #E8ECF1;
+    --muted: #97A3B2;
+    --line: #2C3540;
+    --mini: #6E9BE6;
+    --midi: #4CC2A3;
+    --medium: #F0B04A;
+    --hard: #E06A63;
+    --good: #4CC27A;
+    --bad: #EE6A5C;
+    --focus: #6E9BE6;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+header {
+  max-width: 960px; margin: 0 auto; padding: 20px 20px 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.brand { font-weight: 800; font-stretch: 125%; font-size: 1.25rem; letter-spacing: -0.01em; }
+nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+nav button {
+  border: 0; background: transparent; padding: 8px 14px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--muted);
+}
+nav button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+
+main { max-width: 960px; margin: 0 auto; padding: 20px; }
+section[hidden] { display: none; }
+
+.warning {
+  background: var(--surface); border: 1px solid var(--bad); color: var(--ink);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+}
+
+/* Timer */
+.clock-wrap { text-align: center; padding: 12px 0 20px; }
+.clock {
+  font-weight: 800; font-stretch: 125%; font-variant-numeric: tabular-nums;
+  font-size: clamp(3.5rem, 13vw, 8.5rem); line-height: 1; letter-spacing: -0.02em;
+}
+.clock.paused { opacity: 0.45; }
+.status { color: var(--muted); margin-top: 10px; min-height: 1.45em; }
+
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+@media (min-width: 820px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile {
+  --c: var(--ink);
+  position: relative; text-align: left; cursor: pointer;
+  background: var(--surface); border: 2px solid var(--line); border-radius: 6px;
+  padding: 34px 16px 16px; min-height: 170px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
+  transition: transform .08s ease, border-color .15s ease, background-color .15s ease;
+}
+.tile[data-game="mini"] { --c: var(--mini); }
+.tile[data-game="midi"] { --c: var(--midi); }
+.tile[data-game="medium"] { --c: var(--medium); }
+.tile[data-game="hard"] { --c: var(--hard); }
+.tile::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: var(--c); border-radius: 3px 3px 0 0;
+}
+.tile .key { position: absolute; top: 14px; left: 10px; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.tile .name { font-weight: 700; font-size: 1.1rem; }
+.tile .time { font-weight: 800; font-stretch: 112%; font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tile .meta { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile:not(:disabled):hover { border-color: var(--c); }
+.tile:not(:disabled):active { transform: scale(.98); }
+.tile:disabled { cursor: default; }
+.tile.armed { border-color: var(--c); }
+.tile.done { background: color-mix(in srgb, var(--c) 14%, var(--surface)); border-color: var(--c); }
+.tile.waiting .time { color: var(--muted); }
+.delta-good { color: var(--good); font-weight: 700; }
+.delta-bad { color: var(--bad); font-weight: 700; }
+
+.controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 22px; }
+.btn {
+  border: 2px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 12px 18px; font-weight: 700; cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-size: 1.15rem; padding: 14px 34px; min-width: 180px; }
+.btn.danger { color: var(--bad); }
+.note-row { display: flex; justify-content: center; margin-top: 14px; }
+.note-row input { width: min(460px, 100%); }
+.shortcuts { text-align: center; color: var(--muted); font-size: .85rem; margin-top: 18px; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-family: inherit; font-size: .8rem; background: var(--surface); }
+
+input[type="text"], input[type="date"], select {
+  background: var(--surface); border: 2px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+
+/* Panels and tables */
+h2 { font-stretch: 112%; font-weight: 800; font-size: 1.35rem; margin: 28px 0 12px; }
+h2:first-child { margin-top: 4px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 700; color: var(--muted); font-size: .85rem; }
+tr.excluded td { opacity: .45; }
+td.note { text-align: left; white-space: normal; min-width: 140px; color: var(--muted); }
+td.actions button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px 6px; text-decoration: underline; }
+td.actions button:hover { color: var(--ink); }
+.pb { color: var(--good); font-weight: 700; }
+.empty { color: var(--muted); padding: 20px 4px; }
+
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); font-weight: 600; }
+.form-grid input { width: 100%; color: var(--ink); }
+.form-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+.form-msg { font-size: .9rem; color: var(--muted); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card .v { font-weight: 800; font-stretch: 112%; font-size: 1.7rem; font-variant-numeric: tabular-nums; }
+.card .l { color: var(--muted); font-size: .9rem; }
+
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.legend { font-size: .85rem; color: var(--muted); display: flex; gap: 14px; }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; background: currentColor; }
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+
+.data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.help { color: var(--muted); max-width: 70ch; }
+
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Daily Splits</div>
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="timer" aria-selected="true">Timer</button>
+    <button role="tab" data-tab="history" aria-selected="false">History</button>
+    <button role="tab" data-tab="stats" aria-selected="false">Stats</button>
+    <button role="tab" data-tab="data" aria-selected="false">Data</button>
+  </nav>
+</header>
+
+<main>
+  <div class="warning" id="storageWarning" hidden>
+    This browser isn’t saving data, so your times will be lost when the page closes. Export your data before leaving, or open the app from its GitHub Pages address.
+  </div>
+
+  <!-- TIMER -->
+  <section id="tab-timer">
+    <div class="clock-wrap">
+      <div class="clock" id="clock">0:00.0</div>
+      <div class="status" id="status">Press Start, then tap each game as you finish it.</div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="note-row" id="noteRow" hidden>
+      <input type="text" id="runNote" placeholder="Note for this run (optional), e.g. used a hint" aria-label="Note for this run">
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="mainBtn">Start</button>
+      <button class="btn" id="undoBtn" disabled>Undo last</button>
+      <button class="btn" id="saveBtn" disabled>Save run</button>
+      <button class="btn danger" id="discardBtn" disabled>Discard</button>
+    </div>
+
+    <div class="shortcuts">
+      <kbd>Space</kbd> start / pause &nbsp; <kbd>1</kbd>–<kbd>4</kbd> finish a game &nbsp; <kbd>Z</kbd> undo &nbsp; <kbd>Enter</kbd> save
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" hidden>
+    <h2 id="formTitle">Add a run by hand</h2>
+    <div class="panel">
+      <div class="form-grid">
+        <label>Date<input type="date" id="mDate"></label>
+        <label>Mini<input type="text" id="m-mini" placeholder="0:45" inputmode="decimal"></label>
+        <label>Midi<input type="text" id="m-midi" placeholder="2:10" inputmode="decimal"></label>
+        <label>Sudoku medium<input type="text" id="m-medium" placeholder="6:30" inputmode="decimal"></label>
+        <label>Sudoku hard<input type="text" id="m-hard" placeholder="12:05" inputmode="decimal"></label>
+        <label>Note<input type="text" id="mNote" placeholder="Optional"></label>
+      </div>
+      <div class="form-actions">
+        <button class="btn" id="mSave">Add run</button>
+        <button class="btn" id="mCancel" hidden>Cancel editing</button>
+        <span class="form-msg" id="mMsg">Times as m:ss or seconds. Leave a game blank if you skipped it.</span>
+      </div>
+    </div>
+
+    <h2>All runs</h2>
+    <div class="panel scroll" id="historyTable"></div>
+  </section>
+
+  <!-- STATS -->
+  <section id="tab-stats" hidden>
+    <div id="statsBody"></div>
+  </section>
+
+  <!-- DATA -->
+  <section id="tab-data" hidden>
+    <h2>Move your times between computers</h2>
+    <p class="help">Times are saved in this browser. To use another computer, export a file here, put it somewhere both computers can reach (like a Google Drive or Dropbox folder), then import it on the other computer. Importing adds runs you don’t already have and never deletes anything, so it’s safe to import the same file more than once.</p>
+    <div class="data-actions">
+      <button class="btn" id="exportBtn">Export data (JSON)</button>
+      <button class="btn" id="importBtn">Import data</button>
+      <button class="btn" id="csvBtn">Export spreadsheet (CSV)</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <p class="form-msg" id="dataMsg"></p>
+
+    <h2>Start over</h2>
+    <p class="help">Deletes every run saved in this browser. Export first if you might want them back.</p>
+    <button class="btn danger" id="wipeBtn">Delete all runs</button>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  const GAMES = [
+    { id: 'mini',   name: 'Mini',          key: '1' },
+    { id: 'midi',   name: 'Midi',          key: '2' },
+    { id: 'medium', name: 'Sudoku medium', key: '3' },
+    { id: 'hard',   name: 'Sudoku hard',   key: '4' }
+  ];
+  const DATA_KEY = 'dailySplits.attempts.v1';
+  const RUN_KEY = 'dailySplits.currentRun.v1';
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // ---------- Storage ----------
+  let storageOk = true;
+  function load(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : fallback;
+    } catch (e) { storageFailed(); return fallback; }
+  }
+  function store(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); }
+    catch (e) { storageFailed(); }
+  }
+  function storageFailed() {
+    storageOk = false;
+    document.getElementById('storageWarning').hidden = false;
+  }
+  try { localStorage.setItem('dailySplits.test', '1'); localStorage.removeItem('dailySplits.test'); }
+  catch (e) { storageFailed(); }
+
+  let attempts = load(DATA_KEY, []);
+  let run = load(RUN_KEY, null) || newRun();
+  const saveAttempts = () => store(DATA_KEY, attempts);
+  const saveRunState = () => store(RUN_KEY, run);
+
+  function uid() {
+    return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  }
+
+  // ---------- Formatting ----------
+  function fmt(ms) {
+    if (ms == null || isNaN(ms)) return '—';
+    const tenths = Math.floor(ms / 100);
+    const t = tenths % 10;
+    const totalS = Math.floor(tenths / 10);
+    const s = totalS % 60;
+    const totalM = Math.floor(totalS / 60);
+    const m = totalM % 60;
+    const h = Math.floor(totalM / 60);
+    const ss = String(s).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${ss}.${t}` : `${m}:${ss}.${t}`;
+  }
+  function fmtDelta(ms) {
+    const sign = ms < 0 ? '−' : '+';
+    const a = Math.abs(ms);
+    return sign + (a < 60000 ? (a / 1000).toFixed(1) : fmt(a));
+  }
+  function parseTime(str) {
+    str = (str || '').trim();
+    if (!str) return null;
+    let secs;
+    if (str.includes(':')) {
+      const parts = str.split(':').map(Number);
+      if (parts.some(isNaN)) return NaN;
+      secs = parts.reduce((acc, p) => acc * 60 + p, 0);
+    } else {
+      secs = Number(str);
+    }
+    if (isNaN(secs) || secs < 0) return NaN;
+    return Math.round(secs * 1000);
+  }
+  function localDate(d) {
+    d = new Date(d);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function dayOfWeek(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---------- Stats helpers ----------
+  const counted = () => attempts.filter(a => !a.excluded);
+  const isComplete = a => GAMES.every(g => a.games[g.id] != null);
+  const sortByDate = list => list.slice().sort((a, b) => (a.date + a.startedAt).localeCompare(b.date + b.startedAt));
+
+  function valuesFor(metric, list) {
+    return sortByDate(list || counted())
+      .filter(a => metric === 'total' ? isComplete(a) : a.games[metric] != null)
+      .map(a => ({ a, v: metric === 'total' ? a.total : a.games[metric] }));
+  }
+  function best(metric) {
+    const vals = valuesFor(metric).map(x => x.v);
+    return vals.length ? Math.min(...vals) : null;
+  }
+  const mean = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : null;
+
+  // ---------- Run logic ----------
+  function newRun() {
+    return { status: 'idle', acc: 0, resumedAt: null, finishedAt: null, startedAt: null, splits: [] };
+  }
+  function elapsed() {
+    return run.acc + (run.status === 'running' ? Date.now() - run.resumedAt : 0);
+  }
+  function lastAt() {
+    return run.splits.length ? run.splits[run.splits.length - 1].at : 0;
+  }
+  function start() {
+    run = newRun();
+    run.status = 'running';
+    run.resumedAt = Date.now();
+    run.startedAt = new Date().toISOString();
+    document.getElementById('runNote').value = '';
+    saveRunState(); render();
+  }
+  function togglePause() {
+    if (run.status === 'running') {
+      run.acc = elapsed(); run.status = 'paused'; run.resumedAt = null;
+    } else if (run.status === 'paused') {
+      run.status = 'running'; run.resumedAt = Date.now();
+    }
+    saveRunState(); render();
+  }
+  function record(gameId) {
+    if (run.status !== 'running') return;
+    if (run.splits.some(s => s.game === gameId)) return;
+    const at = elapsed();
+    run.splits.push({ game: gameId, at, dur: at - lastAt() });
+    if (run.splits.length === GAMES.length) {
+      run.acc = at; run.status = 'done'; run.finishedAt = Date.now(); run.resumedAt = null;
+    }
+    saveRunState(); render();
+  }
+  function undo() {
+    if (!run.splits.length) return;
+    run.splits.pop();
+    if (run.status === 'done') {
+      // Carry on as if the last tap never happened
+      run.status = 'running';
+      run.resumedAt = run.finishedAt;
+      run.finishedAt = null;
+    }
+    saveRunState(); render();
+  }
+  function saveRun() {
+    if (!run.splits.length) return;
+    const games = {};
+    GAMES.forEach(g => { games[g.id] = null; });
+    run.splits.forEach(s => { games[s.game] = s.dur; });
+    attempts.push({
+      id: uid(),
+      date: localDate(run.startedAt),
+      startedAt: run.startedAt,
+      games,
+      order: run.splits.map(s => s.game),
+      total: run.splits.reduce((sum, s) => sum + s.dur, 0),
+      note: document.getElementById('runNote').value.trim(),
+      excluded: false
+    });
+    saveAttempts();
+    run = newRun(); saveRunState();
+    document.getElementById('status').textContent = 'Run saved.';
+    render(true);
+  }
+  function discard() {
+    if (run.splits.length && !confirm('Discard this run? Its times won’t be saved.')) return;
+    run = newRun(); saveRunState(); render();
+  }
+
+  // ---------- Timer rendering ----------
+  const tilesEl = document.getElementById('tiles');
+  tilesEl.innerHTML = GAMES.map(g => `
+    <button class="tile" data-game="${g.id}" aria-label="Finish ${g.name}">
+      <span class="key">${g.key}</span>
+      <span class="name">${g.name}</span>
+      <span class="time num">—</span>
+      <span class="meta delta">&nbsp;</span>
+      <span class="meta best"></span>
+    </button>`).join('');
+  tilesEl.addEventListener('click', e => {
+    const t = e.target.closest('.tile');
+    if (t) record(t.dataset.game);
+  });
+
+  function render(keepStatus) {
+    const s = run.status;
+    const clock = document.getElementById('clock');
+    clock.textContent = fmt(elapsed());
+    clock.classList.toggle('paused', s === 'paused');
+
+    GAMES.forEach(g => {
+      const tile = tilesEl.querySelector(`[data-game="${g.id}"]`);
+      const split = run.splits.find(x => x.game === g.id);
+      const b = best(g.id);
+      tile.disabled = s !== 'running' || !!split;
+      tile.classList.toggle('done', !!split);
+      tile.classList.toggle('armed', s === 'running' && !split);
+      tile.classList.toggle('waiting', !split);
+      tile.querySelector('.time').textContent = split ? fmt(split.dur) : '—';
+      const d = tile.querySelector('.delta');
+      if (split && b != null) {
+        const diff = split.dur - b;
+        d.innerHTML = `<span class="${diff < 0 ? 'delta-good' : 'delta-bad'}">${fmtDelta(diff)}</span> vs best${diff < 0 ? ' · new best' : ''}`;
+      } else if (split) {
+        d.textContent = 'First time recorded';
+      } else {
+        d.innerHTML = '&nbsp;';
+      }
+      tile.querySelector('.best').textContent = b != null ? `Best ${fmt(b)}` : 'No best yet';
+    });
+
+    const main = document.getElementById('mainBtn');
+    main.textContent = { idle: 'Start', running: 'Pause', paused: 'Resume', done: 'Save run' }[s];
+    document.getElementById('undoBtn').disabled = !run.splits.length;
+    document.getElementById('saveBtn').disabled = !run.splits.length || s === 'done';
+    document.getElementById('saveBtn').hidden = s === 'done';
+    document.getElementById('discardBtn').disabled = s === 'idle';
+    document.getElementById('noteRow').hidden = !run.splits.length;
+
+    if (!keepStatus) {
+      const st = document.getElementById('status');
+      if (s === 'idle') st.textContent = 'Press Start, then tap each game as you finish it.';
+      else if (s === 'paused') st.textContent = 'Paused.';
+      else if (s === 'done') {
+        const bt = best('total');
+        const diff = bt != null ? elapsed() - bt : null;
+        st.innerHTML = diff == null ? 'All four done. Save the run to record it.'
+          : `All four done: <span class="${diff < 0 ? 'delta-good' : 'delta-bad'}">${fmtDelta(diff)}</span> vs your best total of ${fmt(bt)}.`;
+      }
+    }
+    document.title = s === 'running' ? `${fmt(elapsed())} · Daily Splits` : 'Daily Splits';
+  }
+
+  function tick() {
+    if (run.status === 'running') {
+      document.getElementById('clock').textContent = fmt(elapsed());
+      document.getElementById('status').textContent = `Current game: ${fmt(elapsed() - lastAt())}`;
+      document.title = `${fmt(elapsed())} · Daily Splits`;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  document.getElementById('mainBtn').addEventListener('click', () => {
+    if (run.status === 'idle') start();
+    else if (run.status === 'done') saveRun();
+    else togglePause();
+  });
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('saveBtn').addEventListener('click', saveRun);
+  document.getElementById('discardBtn').addEventListener('click', discard);
+
+  document.addEventListener('keydown', e => {
+    if (currentTab !== 'timer') return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+      if (e.key === 'Enter' && e.target.id === 'runNote' && run.status === 'done') { e.preventDefault(); saveRun(); }
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (run.status === 'idle') start(); else if (run.status !== 'done') togglePause();
+    } else if (['1', '2', '3', '4'].includes(e.key)) {
+      record(GAMES[Number(e.key) - 1].id);
+    } else if (e.key === 'z' || e.key === 'Z') {
+      undo();
+    } else if (e.key === 'Enter' && run.status === 'done') {
+      e.preventDefault(); saveRun();
+    }
+  });
+
+  // ---------- Tabs ----------
+  let currentTab = 'timer';
+  document.querySelectorAll('nav button').forEach(btn => {
+    btn.addEventListener('click', () => showTab(btn.dataset.tab));
+  });
+  function showTab(name) {
+    currentTab = name;
+    document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
+    document.querySelectorAll('main > section').forEach(sec => { sec.hidden = sec.id !== 'tab-' + name; });
+    if (name === 'history') renderHistory();
+    if (name === 'stats') renderStats();
+    if (name === 'timer') render();
+  }
+
+  // ---------- History ----------
+  let editingId = null;
+  document.getElementById('mDate').value = localDate(new Date());
+
+  function renderHistory() {
+    const el = document.getElementById('historyTable');
+    if (!attempts.length) {
+      el.innerHTML = '<div class="empty">No runs yet. Time one on the Timer tab or add one above.</div>';
+      return;
+    }
+    const bests = {};
+    GAMES.forEach(g => { bests[g.id] = best(g.id); });
+    bests.total = best('total');
+    const rows = sortByDate(attempts).reverse().map(a => {
+      const cell = (v, k) => `<td class="${!a.excluded && v != null && v === bests[k] ? 'pb' : ''}">${fmt(v)}</td>`;
+      return `<tr class="${a.excluded ? 'excluded' : ''}">
+        <td>${esc(a.date)} <span style="color:var(--muted)">${DAYS[dayOfWeek(a.date)]}</span></td>
+        ${GAMES.map(g => cell(a.games[g.id], g.id)).join('')}
+        ${isComplete(a) ? cell(a.total, 'total') : `<td title="Not all games played">${fmt(a.total)}*</td>`}
+        <td class="note">${esc(a.note || '')}</td>
+        <td class="actions">
+          <button data-act="edit" data-id="${a.id}">Edit</button>
+          <button data-act="toggle" data-id="${a.id}">${a.excluded ? 'Include' : 'Exclude'}</button>
+          <button data-act="delete" data-id="${a.id}">Delete</button>
+        </td></tr>`;
+    }).join('');
+    el.innerHTML = `<table>
+      <thead><tr><th>Date</th>${GAMES.map(g => `<th>${g.name}</th>`).join('')}<th>Total</th><th style="text-align:left">Note</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <p class="form-msg">Green marks a personal best. * means not all four games were played. Excluded runs don’t count toward stats.</p>`;
+  }
+
+  document.getElementById('historyTable').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const a = attempts.find(x => x.id === btn.dataset.id);
+    if (!a) return;
+    if (btn.dataset.act === 'delete') {
+      if (!confirm(`Delete the run from ${a.date}? This can’t be undone.`)) return;
+      attempts = attempts.filter(x => x.id !== a.id);
+    } else if (btn.dataset.act === 'toggle') {
+      a.excluded = !a.excluded;
+    } else if (btn.dataset.act === 'edit') {
+      editingId = a.id;
+      document.getElementById('mDate').value = a.date;
+      GAMES.forEach(g => { document.getElementById('m-' + g.id).value = a.games[g.id] != null ? fmt(a.games[g.id]) : ''; });
+      document.getElementById('mNote').value = a.note || '';
+      document.getElementById('formTitle').textContent = 'Edit run';
+      document.getElementById('mSave').textContent = 'Save changes';
+      document.getElementById('mCancel').hidden = false;
+      document.getElementById('formTitle').scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    saveAttempts(); renderHistory();
+  });
+
+  function resetForm() {
+    editingId = null;
+    GAMES.forEach(g => { document.getElementById('m-' + g.id).value = ''; });
+    document.getElementById('mNote').value = '';
+    document.getElementById('mDate').value = localDate(new Date());
+    document.getElementById('formTitle').textContent = 'Add a run by hand';
+    document.getElementById('mSave').textContent = 'Add run';
+    document.getElementById('mCancel').hidden = true;
+  }
+  document.getElementById('mCancel').addEventListener('click', () => {
+    resetForm();
+    document.getElementById('mMsg').textContent = 'Times as m:ss or seconds. Leave a game blank if you skipped it.';
+  });
+
+  document.getElementById('mSave').addEventListener('click', () => {
+    const msg = document.getElementById('mMsg');
+    const date = document.getElementById('mDate').value;
+    if (!date) { msg.textContent = 'Pick a date for this run.'; return; }
+    const games = {};
+    for (const g of GAMES) {
+      const v = parseTime(document.getElementById('m-' + g.id).value);
+      if (Number.isNaN(v)) { msg.textContent = `The ${g.name} time isn’t readable. Use m:ss, like 1:23.`; return; }
+      games[g.id] = v;
+    }
+    if (GAMES.every(g => games[g.id] == null)) { msg.textContent = 'Enter at least one game time.'; return; }
+    const total = GAMES.reduce((s, g) => s + (games[g.id] || 0), 0);
+    const note = document.getElementById('mNote').value.trim();
+    if (editingId) {
+      const a = attempts.find(x => x.id === editingId);
+      if (a) Object.assign(a, { date, games, total, note });
+      msg.textContent = 'Changes saved.';
+    } else {
+      attempts.push({ id: uid(), date, startedAt: new Date(date + 'T12:00:00').toISOString(), games, order: [], total, note, excluded: false, manual: true });
+      msg.textContent = 'Run added.';
+    }
+    saveAttempts(); resetForm(); renderHistory();
+  });
+
+  // ---------- Stats ----------
+  function streaks() {
+    const days = [...new Set(counted().map(a => a.date))].sort();
+    if (!days.length) return { current: 0, longest: 0 };
+    const toNum = d => { const [y, m, dd] = d.split('-').map(Number); return Math.round(new Date(y, m - 1, dd).getTime() / 864e5); };
+    const nums = days.map(toNum);
+    let longest = 1, run = 1;
+    for (let i = 1; i < nums.length; i++) {
+      run = nums[i] - nums[i - 1] === 1 ? run + 1 : 1;
+      longest = Math.max(longest, run);
+    }
+    const today = toNum(localDate(new Date()));
+    const last = nums[nums.length - 1];
+    let current = 0;
+    if (today - last <= 1) {
+      current = 1;
+      for (let i = nums.length - 1; i > 0 && nums[i] - nums[i - 1] === 1; i--) current++;
+    }
+    return { current, longest };
+  }
+
+  let chartMetric = 'total';
+  function renderStats() {
+    const el = document.getElementById('statsBody');
+    const list = counted();
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">Stats appear here once you’ve saved a run.</div>';
+      return;
+    }
+    const metrics = [...GAMES.map(g => ({ id: g.id, name: g.name })), { id: 'total', name: 'Total' }];
+    const sob = GAMES.every(g => best(g.id) != null) ? GAMES.reduce((s, g) => s + best(g.id), 0) : null;
+    const st = streaks();
+    const complete = list.filter(isComplete).length;
+
+    const rowsDef = [
+      ['Best', vs => vs.length ? Math.min(...vs) : null],
+      ['Average', vs => mean(vs)],
+      ['Last 5 average', vs => vs.length >= 5 ? mean(vs.slice(-5)) : null],
+      ['Last 12 average', vs => vs.length >= 12 ? mean(vs.slice(-12)) : null],
+      ['Most recent', vs => vs.length ? vs[vs.length - 1] : null]
+    ];
+    const series = {};
+    metrics.forEach(m => { series[m.id] = valuesFor(m.id).map(x => x.v); });
+
+    const summary = `<table>
+      <thead><tr><th></th>${metrics.map(m => `<th>${m.name}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${rowsDef.map(([label, fn]) => `<tr><td>${label}</td>${metrics.map(m => `<td>${fmt(fn(series[m.id]))}</td>`).join('')}</tr>`).join('')}
+        <tr><td>Times recorded</td>${metrics.map(m => `<td>${series[m.id].length}</td>`).join('')}</tr>
+      </tbody></table>`;
+
+    const dow = [1, 2, 3, 4, 5, 6, 0].map(d => {
+      const day = list.filter(a => dayOfWeek(a.date) === d);
+      return `<tr><td>${DAYS[d]}</td>${metrics.map(m => {
+        const vs = valuesFor(m.id, day).map(x => x.v);
+        return `<td>${fmt(mean(vs))}</td>`;
+      }).join('')}</tr>`;
+    }).join('');
+
+    el.innerHTML = `
+      <h2>Overview</h2>
+      <div class="cards">
+        <div class="card"><div class="v">${list.length}</div><div class="l">Runs saved (${complete} with all four games)</div></div>
+        <div class="card"><div class="v num">${fmt(best('total'))}</div><div class="l">Best total</div></div>
+        <div class="card"><div class="v num">${fmt(sob)}</div><div class="l">Sum of bests, your perfect day</div></div>
+        <div class="card"><div class="v">${st.current}</div><div class="l">Day streak (longest ${st.longest})</div></div>
+      </div>
+
+      <h2>Trend</h2>
+      <div class="panel">
+        <div class="chart-head">
+          <select id="chartMetric" aria-label="Game to chart">
+            ${metrics.map(m => `<option value="${m.id}" ${m.id === chartMetric ? 'selected' : ''}>${m.name}</option>`).join('')}
+          </select>
+          <div class="legend"><span style="color:var(--muted)">Each run</span><span id="avgLegend">5-run average</span></div>
+        </div>
+        <div id="chart"></div>
+      </div>
+
+      <h2>By game</h2>
+      <div class="panel scroll">${summary}</div>
+
+      <h2>By day of the week</h2>
+      <div class="panel scroll">
+        <table><thead><tr><th>Average</th>${metrics.map(m => `<th>${m.name}</th>`).join('')}</tr></thead><tbody>${dow}</tbody></table>
+      </div>`;
+
+    document.getElementById('chartMetric').addEventListener('change', e => { chartMetric = e.target.value; drawChart(); });
+    drawChart();
+  }
+
+  function drawChart() {
+    const el = document.getElementById('chart');
+    const pts = valuesFor(chartMetric);
+    const color = chartMetric === 'total' ? 'var(--ink)' : `var(--${chartMetric})`;
+    document.getElementById('avgLegend').style.color = color;
+    if (pts.length < 2) {
+      el.innerHTML = '<div class="empty">Save at least two runs with this game to see a trend.</div>';
+      return;
+    }
+    const W = 640, H = 240, L = 56, R = 12, T = 12, B = 28;
+    const vals = pts.map(p => p.v);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.1 || 1000;
+    lo = Math.max(0, lo - pad); hi = hi + pad;
+    const x = i => L + (i / (pts.length - 1)) * (W - L - R);
+    const y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const raw = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const avg = pts.map((p, i) => {
+      const win = vals.slice(Math.max(0, i - 4), i + 1);
+      return `${x(i).toFixed(1)},${y(mean(win)).toFixed(1)}`;
+    }).join(' ');
+    const grid = [0, 0.5, 1].map(f => {
+      const v = lo + f * (hi - lo);
+      return `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" />
+              <text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+    }).join('');
+    const dots = pts.length <= 60 ? pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.v)}" r="3" fill="${color}" opacity=".45"><title>${p.a.date}: ${fmt(p.v)}</title></circle>`).join('') : '';
+    el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Trend of ${chartMetric} times">
+      ${grid}
+      <polyline points="${raw}" fill="none" stroke="${color}" stroke-width="1.5" opacity=".35" />
+      ${dots}
+      <polyline points="${avg}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+      <text x="${L}" y="${H - 6}">${pts[0].a.date}</text>
+      <text x="${W - R}" y="${H - 6}" text-anchor="end">${pts[pts.length - 1].a.date}</text>
+    </svg>`;
+  }
+
+  // ---------- Data ----------
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  const dataMsg = document.getElementById('dataMsg');
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const payload = { app: 'daily-splits', version: 1, exportedAt: new Date().toISOString(), attempts };
+    download(`daily-splits-${localDate(new Date())}.json`, JSON.stringify(payload, null, 2), 'application/json');
+    dataMsg.textContent = `Exported ${attempts.length} runs.`;
+  });
+
+  document.getElementById('csvBtn').addEventListener('click', () => {
+    const head = ['date', 'day', ...GAMES.map(g => g.id + '_seconds'), 'total_seconds', 'all_four', 'excluded', 'note'];
+    const secs = v => v == null ? '' : (v / 1000).toFixed(1);
+    const lines = sortByDate(attempts).map(a => [
+      a.date, DAYS[dayOfWeek(a.date)], ...GAMES.map(g => secs(a.games[g.id])), secs(a.total),
+      isComplete(a) ? 'yes' : 'no', a.excluded ? 'yes' : 'no', '"' + (a.note || '').replace(/"/g, '""') + '"'
+    ].join(','));
+    download(`daily-splits-${localDate(new Date())}.csv`, [head.join(','), ...lines].join('\n'), 'text/csv');
+    dataMsg.textContent = `Exported ${attempts.length} runs as a spreadsheet.`;
+  });
+
+  document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      const incoming = Array.isArray(parsed) ? parsed : parsed.attempts;
+      if (!Array.isArray(incoming)) throw new Error('no runs');
+      const have = new Set(attempts.map(a => a.id));
+      let added = 0, skipped = 0, bad = 0;
+      incoming.forEach(a => {
+        if (!a || typeof a !== 'object' || !a.games || !a.date) { bad++; return; }
+        if (a.id && have.has(a.id)) { skipped++; return; }
+        const games = {};
+        GAMES.forEach(g => { games[g.id] = typeof a.games[g.id] === 'number' ? a.games[g.id] : null; });
+        const clean = {
+          id: a.id || uid(), date: String(a.date), startedAt: a.startedAt || new Date(a.date + 'T12:00:00').toISOString(),
+          games, order: Array.isArray(a.order) ? a.order : [],
+          total: GAMES.reduce((s, g) => s + (games[g.id] || 0), 0),
+          note: a.note ? String(a.note) : '', excluded: !!a.excluded, manual: !!a.manual
+        };
+        attempts.push(clean); have.add(clean.id); added++;
+      });
+      saveAttempts();
+      dataMsg.textContent = `Added ${added} new runs. ${skipped} were already here.` + (bad ? ` ${bad} entries couldn’t be read.` : '');
+    } catch (err) {
+      dataMsg.textContent = 'That file couldn’t be read. Choose a file exported from Daily Splits.';
+    }
+  });
+
+  document.getElementById('wipeBtn').addEventListener('click', () => {
+    if (!attempts.length) { dataMsg.textContent = 'There are no runs to delete.'; return; }
+    if (!confirm(`Delete all ${attempts.length} runs from this browser? This can’t be undone.`)) return;
+    attempts = []; saveAttempts();
+    dataMsg.textContent = 'All runs deleted.';
+  });
+
+  // Save the clock position if the tab closes mid-run
+  window.addEventListener('beforeunload', saveRunState);
+
+  render();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
